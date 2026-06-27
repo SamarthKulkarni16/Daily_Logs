@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Daily Logs</title>
+  
+  <!-- Full-Screen PWA Metadata -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
+  
+  <!-- Inline Web Manifest using Data URI -->
+  <link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Daily Logs","short_name":"Daily Logs","description":"A single-file minimalist diary and daily logger","start_url":".","display":"standalone","background_color":"%23000000","theme_color":"%23000000","icons":[{"src":"data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27192%27 height=%27192%27 viewBox=%270 0 192 192%27%3E%3Crect width=%27192%27 height=%27192%27 fill=%27%23000000%27/%3E%3Ctext x=%2750%25%27 y=%2755%25%27 font-family=%27sans-serif%27 font-size=%2796%27 fill=%27%23ffffff%27 text-anchor=%27middle%27%3EDL%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"},{"src":"data:image/svg+xml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27512%27 height=%27512%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 fill=%27%23000000%27/%3E%3Ctext x=%2750%25%27 y=%2755%25%27 font-family=%27sans-serif%27 font-size=%27256%27 fill=%27%23ffffff%27 text-anchor=%27middle%27%3EDL%3C/text%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
+  
+  <!-- Supabase CDN-hosted client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --bg-color: #000000;
+      --text-color: #ffffff;
+      --text-secondary: #777777;
+      --accent-color: #10b981; /* Sage-green */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-sans);
+      overflow: hidden;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Views container with full screen overlay setup */
+    .view {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 2rem;
+      padding-top: calc(2rem + env(safe-area-inset-top));
+      padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      transition: opacity 0.30s ease, transform 0.30s ease;
+      background-color: var(--bg-color);
+      z-index: 10;
+    }
+
+    .view-hidden {
+      opacity: 0;
+      transform: scale(0.98);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Log View - Editor Styles */
+    header {
+      margin-bottom: 2rem;
+      user-select: none;
+    }
+
+    .date-display {
+      font-size: 1.6rem;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      color: var(--text-color);
+    }
+
+    .session-info {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      margin-top: 0.3rem;
+    }
+
+    .editor-container {
+      flex-grow: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .editor-textarea {
+      width: 100%;
+      flex-grow: 1;
+      background: transparent;
+      color: var(--text-color);
+      border: none;
+      resize: none;
+      outline: none;
+      font-family: var(--font-sans);
+      font-size: 1.2rem;
+      line-height: 1.7;
+      padding: 0;
+      margin: 0;
+      caret-color: transparent; /* Invisible caret as requested */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* History View Styles */
+    .history-header {
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 1.2rem;
+      margin-bottom: 1.5rem;
+      user-select: none;
+    }
+
+    .history-title {
+      font-size: 2rem;
+      font-weight: 400;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+
+    .history-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-top: 0.4rem;
+    }
+
+    .history-list {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+
+    /* Scrollbar */
+    .history-list::-webkit-scrollbar {
+      width: 3px;
+    }
+    .history-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .history-list::-webkit-scrollbar-thumb {
+      background: #222;
+      border-radius: 1.5px;
+    }
+
+    .log-item {
+      border-bottom: 1px solid #111;
+      padding: 1.6rem 0;
+    }
+    .log-item:last-child {
+      border-bottom: none;
+    }
+
+    .log-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+
+    .log-item-date {
+      font-size: 1.05rem;
+      font-weight: 400;
+      color: var(--text-color);
+    }
+
+    .log-item-sync {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      padding: 0.18rem 0.5rem;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .sync-badge-true {
+      background: rgba(16, 185, 129, 0.08);
+      color: #10b981;
+    }
+    .sync-badge-active {
+      background: rgba(59, 130, 246, 0.08);
+      color: #3b82f6;
+    }
+    .sync-badge-false {
+      background: rgba(156, 163, 175, 0.08);
+      color: #9ca3af;
+    }
+
+    .log-item-content {
+      font-size: 1rem;
+      color: #bbbbbb;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Micro-UI Status Indicator */
+    .status-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      z-index: 1000;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #6b7280;
+      transition: background-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    /* Status Animations & Colors */
+    @keyframes pulse-grey {
+      0% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(107, 114, 128, 0.4); }
+      50% { opacity: 1; box-shadow: 0 0 0 4px rgba(107, 114, 128, 0.2); }
+      100% { opacity: 0.4; box-shadow: 0 0 0 0 rgba(107, 114, 128, 0.4); }
+    }
+    @keyframes pulse-syncing {
+      0% { opacity: 0.4; background-color: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      50% { opacity: 1; background-color: #f97316; box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2); }
+      100% { opacity: 0.4; background-color: #3b82f6; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+    }
+
+    .status-saving-dot {
+      animation: pulse-grey 1.5s infinite ease-in-out;
+      background-color: #6b7280;
+    }
+    .status-saved-local-dot {
+      background-color: #9ca3af;
+    }
+    .status-syncing-dot {
+      animation: pulse-syncing 1.5s infinite ease-in-out;
+    }
+    .status-synced-dot {
+      background-color: #10b981;
+    }
+    .status-failed-dot {
+      background-color: #f97316; /* dull orange/red */
+    }
+
+    /* Background click target helper to ensure triple tap triggers easily */
+    .tap-target-helper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+    
+    <!-- Active Log View -->
+    <div id="log-view" class="view">
+      <header>
+        <div class="date-display" id="date-display">June 26, 2026</div>
+        <div class="session-info" id="session-info">logs/2026-06-26-193203.md</div>
+      </header>
+      
+      <div class="editor-container">
+        <textarea 
+          id="editor" 
+          class="editor-textarea" 
+          placeholder="Start writing..." 
+          autofocus 
+          autocomplete="off" 
+          autocorrect="off" 
+          autocapitalize="off" 
+          spellcheck="false"
+          oninput="handleInput()"></textarea>
+      </div>
+    </div>
+
+    <!-- History View (Hidden by default) -->
+    <div id="history-view" class="view view-hidden">
+      <div class="history-header">
+        <h1 class="history-title">History</h1>
+        <div class="history-subtitle">Triple tap anywhere to return to current log</div>
+      </div>
+      
+      <div class="history-list" id="history-list">
+        <!-- Dynmically Populated -->
+      </div>
+    </div>
+
+    <!-- Status Dot Micro-UI -->
+    <div class="status-container">
+      <span id="status-text">synced</span>
+      <div id="status-dot" class="status-dot status-synced-dot"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // SUPABASE CONFIGURATION - PASTE YOUR KEYS HERE
+    // ==========================================
+    const SUPABASE_URL = 'https://your-supabase-project.supabase.co';
+    const SUPABASE_ANON_KEY = 'your-supabase-anon-key';
+
+    // Helper to check if credentials have been replaced
+    const isSupabaseConfigured = () => {
+      return SUPABASE_URL && 
+             SUPABASE_URL !== 'https://your-supabase-project.supabase.co' && 
+             SUPABASE_ANON_KEY && 
+             SUPABASE_ANON_KEY !== 'your-supabase-anon-key';
+    };
+
+    // ==========================================
+    // SESSION ANCHOR SETUP
+    // ==========================================
+    const sessionAnchor = new Date();
+    const sessionTimestamp = sessionAnchor.toISOString();
+
+    // Format local date display
+    const formatElegantDate = (date) => {
+      return date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    };
+    document.getElementById('date-display').innerText = formatElegantDate(sessionAnchor);
+
+    // Generate unique session key/filename
+    const pad = (num) => String(num).padStart(2, '0');
+    const year = sessionAnchor.getFullYear();
+    const month = pad(sessionAnchor.getMonth() + 1);
+    const day = pad(sessionAnchor.getDate());
+    const hours = pad(sessionAnchor.getHours());
+    const minutes = pad(sessionAnchor.getMinutes());
+    const seconds = pad(sessionAnchor.getSeconds());
+    const sessionFilename = `logs/${year}-${month}-${day}-${hours}${minutes}${seconds}.md`;
+    document.getElementById('session-info').innerText = sessionFilename;
+
+    // ==========================================
+    // INDEXEDDB CONFIGURATION & WRAPPER
+    // ==========================================
+    let db;
+    const dbName = 'DailyLogsDB';
+    const storeName = 'logs';
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => {
+          const database = e.target.result;
+          if (!database.objectStoreNames.contains(storeName)) {
+            const store = database.createObjectStore(storeName, { keyPath: 'filename' });
+            store.createIndex('is_synced', 'is_synced', { unique: false });
+          }
+        };
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          resolve(db);
+        };
+        request.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    // ==========================================
+    // INPUT LIFE CYCLE ENGINE
+    // ==========================================
+    let debounceTimer;
+    let syncTimer;
+
+    function handleInput() {
+      setStatus('saving');
+      
+      // 1. 600ms Debounce before writing locally
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        saveToLocalDB();
+      }, 600);
+    }
+
+    function saveToLocalDB() {
+      const textContent = document.getElementById('editor').value;
+      
+      const record = {
+        filename: sessionFilename,
+        content: textContent,
+        created_at: sessionTimestamp,
+        is_synced: false
+      };
+      
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.put(record);
+      
+      request.onsuccess = () => {
+        setStatus('saved locally');
+        
+        // 2. Exactly 1.5 seconds sync delay to execute flushQueue()
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(() => {
+          flushQueue();
+        }, 1500);
+        
+        updateHistoryView();
+      };
+      request.onerror = (e) => {
+        console.error("Local SQLite/IndexedDB save failed", e.target.error);
+        setStatus('failed');
+      };
+    }
+
+    // Set UI Status indicator states
+    function setStatus(state) {
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      
+      dot.className = 'status-dot';
+      
+      switch(state) {
+        case 'saving':
+          dot.classList.add('status-saving-dot');
+          text.innerText = 'saving...';
+          break;
+        case 'saved locally':
+          dot.classList.add('status-saved-local-dot');
+          text.innerText = 'saved locally';
+          break;
+        case 'syncing':
+          dot.classList.add('status-syncing-dot');
+          text.innerText = 'syncing...';
+          break;
+        case 'synced':
+          dot.classList.add('status-synced-dot');
+          text.innerText = 'synced';
+          break;
+        case 'failed':
+          dot.classList.add('status-failed-dot');
+          text.innerText = 'sync failed';
+          break;
+      }
+    }
+
+    // ==========================================
+    // SYNC QUEUE PROCESSING (flushQueue)
+    // ==========================================
+    let isSyncingInProgress = false;
+
+    async function flushQueue() {
+      if (isSyncingInProgress) return;
+      
+      // Check offline status
+      if (!navigator.onLine) {
+        // Halt processing silently, leaving status as 'saved locally'
+        const curText = document.getElementById('status-text').innerText;
+        if (curText === 'syncing...' || curText === 'saving...') {
+          setStatus('saved locally');
+        }
+        return;
+      }
+      
+      // Verify Supabase is configured
+      if (!isSupabaseConfigured()) {
+        const curText = document.getElementById('status-text').innerText;
+        if (curText === 'syncing...' || curText === 'saving...') {
+          setStatus('saved locally');
+        }
+        return;
+      }
+
+      isSyncingInProgress = true;
+      setStatus('syncing');
+
+      try {
+        const unsyncedLogs = await getUnsyncedLogs();
+        if (unsyncedLogs.length === 0) {
+          setStatus('synced');
+          isSyncingInProgress = false;
+          return;
+        }
+
+        // Initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        for (const log of unsyncedLogs) {
+          // Upsert record into Supabase "daily_logs"
+          const { error } = await supabase
+            .from('daily_logs')
+            .upsert({
+              filename: log.filename,
+              content: log.content,
+              created_at: log.created_at
+            }, { onConflict: 'filename' });
+
+          if (error) {
+            throw error;
+          }
+
+          // Mark item as synced locally
+          await markAsSyncedInDB(log.filename);
+        }
+
+        setStatus('synced');
+        updateHistoryView();
+      } catch (err) {
+        console.error("Queue synchronization failure:", err);
+        setStatus('failed');
+      } finally {
+        isSyncingInProgress = false;
+      }
+    }
+
+    function getUnsyncedLogs() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = (e) => {
+          const all = e.target.result || [];
+          resolve(all.filter(log => !log.is_synced));
+        };
+        request.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    function markAsSyncedInDB(filename) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const getRequest = store.get(filename);
+        getRequest.onsuccess = (e) => {
+          const record = e.target.result;
+          if (record) {
+            record.is_synced = true;
+            const putRequest = store.put(record);
+            putRequest.onsuccess = () => resolve();
+            putRequest.onerror = (err) => reject(err.target.error);
+          } else {
+            resolve();
+          }
+        };
+        getRequest.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    function getAllLocalLogs() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = (e) => resolve(e.target.result || []);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    // ==========================================
+    // HISTORY VIEW RENDER
+    // ==========================================
+    async function updateHistoryView() {
+      const historyList = document.getElementById('history-list');
+      if (!historyList) return;
+
+      let mergedLogs = [];
+      try {
+        mergedLogs = await getAllLocalLogs();
+      } catch (err) {
+        console.error("Failed to load local logs:", err);
+      }
+
+      // Try pulling from Supabase if online to merge
+      if (navigator.onLine && isSupabaseConfigured()) {
+        try {
+          const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          const { data, error } = await supabase
+            .from('daily_logs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            data.forEach(remote => {
+              const localIndex = mergedLogs.findIndex(l => l.filename === remote.filename);
+              if (localIndex === -1) {
+                mergedLogs.push({
+                  filename: remote.filename,
+                  content: remote.content,
+                  created_at: remote.created_at,
+                  is_synced: true
+                });
+              } else {
+                // If remote exists but local content differs, we keep the newer or local unsynced copy
+                if (mergedLogs[localIndex].is_synced && mergedLogs[localIndex].content !== remote.content) {
+                  mergedLogs[localIndex].content = remote.content;
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Could not retrieve logs from Supabase for history:", e);
+        }
+      }
+
+      // Sort reverse-chronologically
+      mergedLogs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      if (mergedLogs.length === 0) {
+        historyList.innerHTML = `<div style="color: #444; font-style: italic; padding: 2rem; text-align: center; font-size: 0.95rem;">No logs found. Start typing on the active view.</div>`;
+        return;
+      }
+
+      historyList.innerHTML = mergedLogs.map(log => {
+        const dateObj = new Date(log.created_at);
+        const niceDate = dateObj.toLocaleDateString(undefined, {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        const isCurrent = log.filename === sessionFilename;
+        const badgeClass = isCurrent ? 'sync-badge-active' : (log.is_synced ? 'sync-badge-true' : 'sync-badge-false');
+        const badgeText = isCurrent ? 'Active' : (log.is_synced ? 'Synced' : 'Saved Locally');
+        const contentSafe = log.content ? log.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+
+        return `
+          <div class="log-item">
+            <div class="log-item-header">
+              <div class="log-item-date">${niceDate}</div>
+              <span class="log-item-sync ${badgeClass}">${badgeText}</span>
+            </div>
+            <div class="log-item-content">${contentSafe || '<span style="color:#333; font-style:italic;">Empty entry</span>'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // INITIALIZATION & AUTOFOCUS
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initDB().then(() => {
+        // Load active session log from DB if it exists
+        const transaction = db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.get(sessionFilename);
+        request.onsuccess = (e) => {
+          const record = e.target.result;
+          if (record) {
+            document.getElementById('editor').value = record.content;
+          }
+          setStatus('synced');
+          flushQueue();
+          updateHistoryView();
+        };
+      }).catch(err => {
+        console.error("DB Initialization error", err);
+      });
+
+      // Autofocus textarea and trigger keyboard
+      const editor = document.getElementById('editor');
+      editor.focus();
+      
+      // Trick to force mobile browser keyboard to pop up on user entry/first load
+      document.body.addEventListener('click', () => {
+        if (currentView === 'log') {
+          editor.focus();
+        }
+      }, { once: true });
+    });
+
+    // ==========================================
+    // TRIPLE TAP NAVIGATION
+    // ==========================================
+    let currentView = 'log'; // 'log' or 'history'
+    let tapCount = 0;
+    let lastTapTime = 0;
+
+    function toggleView() {
+      const logView = document.getElementById('log-view');
+      const historyView = document.getElementById('history-view');
+      const editor = document.getElementById('editor');
+
+      if (currentView === 'log') {
+        currentView = 'history';
+        logView.classList.add('view-hidden');
+        historyView.classList.remove('view-hidden');
+        updateHistoryView();
+      } else {
+        currentView = 'log';
+        historyView.classList.add('view-hidden');
+        logView.classList.remove('view-hidden');
+        setTimeout(() => editor.focus(), 150);
+      }
+    }
+
+    function handleTripleTap(e) {
+      const now = Date.now();
+      if (now - lastTapTime < 450) {
+        tapCount++;
+      } else {
+        tapCount = 1;
+      }
+      lastTapTime = now;
+
+      if (tapCount === 3) {
+        tapCount = 0;
+        toggleView();
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+
+    // Listen to taps globally on desktop and mobile
+    document.addEventListener('click', handleTripleTap, true);
+    
+    // Instant touch support for immediate tap responsive feeling on mobile
+    let lastTouchStartTime = 0;
+    document.addEventListener('touchstart', (e) => {
+      const now = Date.now();
+      if (now - lastTouchStartTime > 400) {
+        handleTripleTap(e);
+      }
+      lastTouchStartTime = now;
+    }, { passive: false });
+
+    // ==========================================
+    // AUTO-SYNC TRIGGERS
+    // ==========================================
+    // Trigger flushQueue on online status restore
+    window.addEventListener('online', () => {
+      flushQueue();
+    });
+
+    // Trigger flushQueue on visibility state change (e.g., app minimized or switched tabs)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        // Save current active text immediately and flush queue
+        saveToLocalDB();
+        flushQueue();
+      }
+    });
+
+    // ==========================================
+    // SERVICE WORKER REGISTRATION (Offline Caching)
+    // ==========================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        // Register sw.js if present or attempt graceful inline registration
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('PWA Service Worker registered:', reg.scope))
+          .catch(err => {
+            console.log('No sw.js file found; standard offline Service Worker inactive. Running fully client-side IndexedDB with online Supabase updates.', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

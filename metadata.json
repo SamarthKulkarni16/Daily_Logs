@@ -1,0 +1,6 @@
+{
+  "name": "Daily Logs",
+  "description": "A single-file minimalist diary and daily logger syncing with Supabase",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
