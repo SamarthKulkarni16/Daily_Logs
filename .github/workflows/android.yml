@@ -39,14 +39,21 @@ jobs:
           npx cap sync android
 
       - name: Build Android APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+      run: cd android && ./gradlew assembleRelease
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: daily-logs-capacitor-apk
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+      - name: Sign APK
+      uses: r0adkll/sign-android-release@v1
+      id: sign_app
+      with:
+        releaseDirectory: android/app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+       - name: Upload Signed APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release-signed
+        path: ${{ steps.sign_app.outputs.signedReleaseFile }}    
           if-no-files-found: error
