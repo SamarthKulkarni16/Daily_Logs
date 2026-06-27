@@ -1,0 +1,8 @@
+{
+  "appId": "com.aistudio.dailylogs.zkpmwq",
+  "appName": "Daily Logs",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
